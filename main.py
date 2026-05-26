@@ -9,7 +9,7 @@ class NPC:
         self.llama = llama
         self.memory_collection = memory_collection
     def speak(self, incoming_message, sender_name):
-        formatted_input = f"{sender_name} says to you : \"{incoming_message}\""
+        formatted_input = f"{sender_name} says to you : \"{incoming_message}\"\n(Directive: React directly to this new statement. Do not repeat your previous thoughts.)"
         results = self.memory_collection.query(
             query_texts=[formatted_input], 
             n_results=2
@@ -28,6 +28,8 @@ class NPC:
             {"role": "user", "content": formatted_input}
         ],
         max_tokens=150,
+        temperature=0.85, # more creative
+        repeat_penalty=1.2, # penalises for same words again
         stop=["\n"]
         )
         reply = response["choices"][0]["message"]["content"].strip()
@@ -77,16 +79,19 @@ if emma_db.count() == 0:
         documents=[
             "Chris is the bartender who works at my tavern. He is older than me, and I respect him and find him amusing.",
             "I am often nervous about dropping things or messing up my chores at the tavern.",
-            "I secretely like the tavern owner's son Himmel"
+            "I am always curious about things that happen around the town and Chris seens to know his way around."
         ],
         ids=["lore_emma_1", "lore_emma_2", "lore_emma_3"]
     )
-
+# directive allows to drive the conversation forward
 bartender = NPC(
     name="Chris", 
     system_prompt=(
         "You are a middle-aged charismatic bartender at a tavern in a fantasy small village called Echoing Hallows. "
-        "The world is Game of Thrones. You know how to talk to customers fluently and can hold a conversations quite well. Speak in no more than two sentences."
+        "The world is Game of Thrones. You know how to talk to customers fluently and can hold a conversations quite well."
+        "DIRECTIVE: You are currently busy wiping down the bar. Drive the conversation forward. "
+        "If a topic is resolved, change the subject, share a rumor, or ask a question. Do not just endlessly agree. "
+        "Speak in no more than two sentences."
     ), 
     llama=npc_brain,
     memory_collection=chris_db
@@ -95,7 +100,10 @@ maid = NPC(
     name="Emma", 
     system_prompt=(
         "You are a young adult nervous cleaner maid in a tavern in a fantasy village called Echoing Hallows. "
-        "The world is Game of Thrones. You cannot hold conversations easily but can talk to people you trust without any problems. Speak in no more than two sentences."
+        "The world is Game of Thrones. You cannot hold conversations easily but can talk to people you trust without any problems. "
+        "DIRECTIVE: You are currently sweeping the floor. "
+        "If you run out of things to say, mention you need to get back to work or bring up something else. Do not just endlessly agree or nod. "
+        "Speak in no more than two sentences."
     ), 
     llama=npc_brain,
     memory_collection=emma_db
