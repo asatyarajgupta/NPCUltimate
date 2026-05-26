@@ -8,6 +8,7 @@ class NPC:
         self.system_prompt = system_prompt
         self.llama = llama
         self.memory_collection = memory_collection
+        self.short_term_memory = []
     def speak(self, incoming_message, sender_name):
         formatted_input = f"{sender_name} says to you : \"{incoming_message}\"\n(Directive: React directly to this new statement. Do not repeat your previous thoughts.)"
         results = self.memory_collection.query(
@@ -22,19 +23,31 @@ class NPC:
                 for memory in past_memories:
                      memory_inject += f"\n- {memory}"
 
+        messages = [{"role": "system", "content": memory_inject}]
+        messages.extend(self.short_term_memory)
+        messages.append({"role": "user", "content": formatted_input})
+
+
         response = self.llama.create_chat_completion(
-            messages=[
-            {"role": "system", "content": memory_inject},
-            {"role": "user", "content": formatted_input}
-        ],
-        max_tokens=150,
-        temperature=0.85, # more creative
-        repeat_penalty=1.2, # penalises for same words again
-        stop=["\n"]
+            messages=messages,
+            max_tokens=150,
+            temperature=0.85, # more creative
+            repeat_penalty=1.15, # penalises for same words again
+            stop=["\n"]
         )
         reply = response["choices"][0]["message"]["content"].strip()
         print(f"{self.name} : {reply}\n")
         # saving this interaction
+
+        self.short_term_memory.append({"role": "user", "content": formatted_input})
+        self.short_term_memory.append({"role": "assistant", "content": reply})
+
+        if len(self.short_term_memory) > 4:
+             self.short_term_memory = self.short_term_memory[-4:]
+
+
+
+
         interaction_log = f"{sender_name} said to me : \"{incoming_message}\" and I replied \"{reply}\""
         unique_id = f"mem_{int(time.time()*1000)}"
         self.memory_collection.upsert(
