@@ -1,6 +1,7 @@
 from llama_cpp import Llama
 import time
 import chromadb
+import json
 
 class NPC:
     def __init__(self, name, system_prompt, llama, memory_collection):
@@ -33,14 +34,25 @@ class NPC:
             max_tokens=150,
             temperature=0.85, # more creative
             repeat_penalty=1.15, # penalises for same words again
-            stop=["\n"]
+            response_format={"type" : "json_object"}
         )
-        reply = response["choices"][0]["message"]["content"].strip()
-        print(f"{self.name} : {reply}\n")
+        raw_reply = response["choices"][0]["message"]["content"].strip()
+        try:
+            parsed_data = json.loads(raw_reply)
+            thought = parsed_data.get("thought", "...")
+            action = parsed_data.get("action", "...")
+            dialogue = parsed_data.get("dialogue", "...")
+            print(f"--- {self.name}'s Turn ---\n")
+            print(f"[Inner Thought] : {thought}\n")
+            print(f"[Action] : {action}\n")
+            print(f"[Dialogue] : {dialogue}\n")
+        except json.JSONDecodeError:
+            print(f"{self.name} (raw) : {raw_reply}")
+            dialogue = raw_reply
         # saving this interaction
 
         self.short_term_memory.append({"role": "user", "content": formatted_input})
-        self.short_term_memory.append({"role": "assistant", "content": reply})
+        self.short_term_memory.append({"role": "assistant", "content": dialogue})
 
         if len(self.short_term_memory) > 4:
              self.short_term_memory = self.short_term_memory[-4:]
@@ -48,13 +60,13 @@ class NPC:
 
 
 
-        interaction_log = f"{sender_name} said to me : \"{incoming_message}\" and I replied \"{reply}\""
+        interaction_log = f"{sender_name} said to me : \"{incoming_message}\" and I replied \"{dialogue}\""
         unique_id = f"mem_{int(time.time()*1000)}"
         self.memory_collection.upsert(
              documents=[interaction_log],
              ids=[unique_id]
         )
-        return reply
+        return dialogue
 
 
 model_filename = "./Qwen3VL-8B-Instruct-Q4_K_M.gguf"
@@ -100,11 +112,11 @@ if emma_db.count() == 0:
 bartender = NPC(
     name="Chris", 
     system_prompt=(
-        "You are a middle-aged charismatic bartender at a tavern in a fantasy small village called Echoing Hallows. "
-        "The world is Game of Thrones. You know how to talk to customers fluently and can hold a conversations quite well."
-        "DIRECTIVE: You are currently busy wiping down the bar. Drive the conversation forward. "
-        "If a topic is resolved, change the subject, share a rumor, or ask a question. Do not just endlessly agree. "
-        "Speak in no more than two sentences."
+        "You are Chris, a charismatic bartender at a tavern in Echoing Hallows. The world is Game of Thrones. "
+        "You are currently wiping down the bar. You get bored easily. If a conversation goes on too long about the same topic, "
+        "you will abruptly change the subject or go talk to another customer. "
+        "YOU MUST RESPOND ONLY IN VALID JSON FORMAT EXACTLY LIKE THIS: "
+        "{\"thought\": \"Your internal reasoning about what to do next\", \"action\": \"A physical action you take\", \"dialogue\": \"The exact words you say out loud\"}"
     ), 
     llama=npc_brain,
     memory_collection=chris_db
@@ -112,17 +124,17 @@ bartender = NPC(
 maid = NPC(
     name="Emma", 
     system_prompt=(
-        "You are a young adult nervous cleaner maid in a tavern in a fantasy village called Echoing Hallows. "
-        "The world is Game of Thrones. You cannot hold conversations easily but can talk to people you trust without any problems. "
-        "DIRECTIVE: You are currently sweeping the floor. "
-        "If you run out of things to say, mention you need to get back to work or bring up something else. Do not just endlessly agree or nod. "
-        "Speak in no more than two sentences."
+        "You are Emma, a nervous cleaner maid in Echoing Hallows. The world is Game of Thrones. "
+        "You are currently sweeping the floor. You are terrified of getting in trouble for not working. "
+        "If a conversation lingers, you must end it and walk away to clean another table. "
+        "YOU MUST RESPOND ONLY IN VALID JSON FORMAT EXACTLY LIKE THIS: "
+        "{\"thought\": \"Your internal reasoning about what to do next\", \"action\": \"A physical action you take\", \"dialogue\": \"The exact words you say out loud\"}"
     ), 
     llama=npc_brain,
     memory_collection=emma_db
 )
 current_message = "Havent quite a few people have gone missing near that cave, Huh chris. Do you know anything about it? I am curious"
 
-for _ in range(3):
+for _ in range(10):
     current_message = bartender.speak(current_message, "Emma")
     current_message = maid.speak(current_message, "Chris")
